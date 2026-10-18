@@ -1,22 +1,11 @@
 import streamlit as st
 import pandas as pd
-import asyncio
-import os
+import requests
+import io
 
-# פונקציה שמתקינה את הדפדפן הנסתר בשרת באופן אוטומטי
-@st.cache_resource
-def install_playwright():
-    os.system("playwright install chromium")
-    os.system("playwright install-deps")
-
-install_playwright()
-from playwright.async_api import async_playwright
-from bs4 import BeautifulSoup
-
-# --- הגדרות עיצוב למסך ---
-st.set_page_config(page_title="Triathlon Intel Bot", page_icon="🏊‍♂️", layout="wide")
-st.title("🏆 בוט מודיעין טריאתלון - קטגוריית 50-54")
-st.markdown("הזן קישור לרשימת משתתפים של תחרות, והמערכת תנתח את סיכויי הפודיום שלך אל מול היריבים.")
+# --- עיצוב המסך ---
+st.set_page_config(page_title="Triathlon Intel", page_icon="🏆", layout="wide")
+st.title("🏆 בוט מודיעין טריאתלון - גרסה מהירה")
 
 # --- הזמנים שלך (אשדוד 2026) ---
 my_times = {
@@ -26,31 +15,6 @@ my_times = {
     'תוצאה': pd.to_timedelta('01:26:27')
 }
 
-# --- פונקציית השאיבה ---  
-async def fetch_participants(url):
-    async with async_playwright() as p:
-        # הפעלת הדפדפן במצב חסכוני מיוחד לשרתי ענן חלשים
-        browser = await p.chromium.launch(
-            headless=True, 
-            args=[
-                '--no-sandbox', 
-                '--disable-dev-shm-usage', 
-                '--disable-gpu', 
-                '--single-process'
-            ]
-        )
-        page = await browser.new_page()
-        await page.goto(url)
-        await page.wait_for_selector("table", timeout=15000)
-        html = await page.content()
-        await browser.close()
-        
-        soup = BeautifulSoup(html, 'html.parser')
-        table = soup.find('table')
-        if table:
-            return pd.read_html(str(table))[0]
-        return None
-# --- פונקציית עזר לחישוב זמנים ---
 def time_to_delta(t_str):
     try:
         if pd.isna(t_str) or t_str == 'אין נתונים בעבר': return pd.NaT
@@ -61,52 +25,65 @@ def time_to_delta(t_str):
 def format_gap(td):
     if pd.isna(td): return ""
     secs = int(td.total_seconds())
-    sign = "🟢 מוביל ב-" if secs > 0 else "🔴 בפיגור של "
+    sign = "🟢 מוביל ב-" if secs > 0 else "🔴 פיגור "
     mins, s = divmod(abs(secs), 60)
     return f"{sign}{mins:02d}:{s:02d}"
 
 # --- ממשק המשתמש ---
-target_url = st.text_input("🔗 הדבק כאן את הקישור לרשימת המשתתפים (איגוד הטריאתלון):")
+target_url = st.text_input("🔗 הדבק קישור לרשימת המשתתפים באתר האיגוד:")
 
-if st.button("🚀 נתח יריבים וסיכויי פודיום"):
+if st.button("🚀 נתח יריבים במהירות"):
     if target_url:
-        with st.spinner("סורק את אתר האיגוד ומנתח נתונים..."):
+        with st.spinner("שואב נתונים..."):
             try:
-                # שאיבת הנתונים
-                df_live = asyncio.run(fetch_participants(target_url))
+                # שאיבה מהירה וקלה ללא דפדפן
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                res = requests.get(target_url, headers=headers, timeout=15)
+                tables = pd.read_html(io.StringIO(res.text))
                 
-                if df_live is not None:
-                    # סינון גילאי 50-54
-                    year_col = [col for col in df_live.columns if 'לידה' in col or 'שנת' in col][0]
-                    df_live[year_col] = pd.to_numeric(df_live[year_col], errors='coerce')
-                    df_filtered = df_live[(df_live[year_col] >= 1972) & (df_live[year_col] <= 1976)]
+                if tables:
+                    # לוקח את הטבלה הגדולה ביותר בעמוד (רשימת המשתתפים)
+                    df_live = max(tables, key=len)
                     
-                    st.success(f"נמצאו {len(df_filtered)} מתחרים בקטגוריית 50-54!")
-                    
-                    # (לצורך ההדגמה באפליקציה: נטען את נתוני אשדוד כהיסטוריה בסיסית. 
-                    # בעתיד נחבר למסד נתונים מלא)
-                    df_history = pd.read_csv("https://raw.githubusercontent.com/username/repo/main/triathlon_results_raw.csv") # דורש קובץ זמין ברשת
-                    
-                    live_name_col = [col for col in df_filtered.columns if 'שם' in col][0]
-                    history_name_col = [col for col in df_history.columns if 'שם' in col][0]
-                    
-                    # הצלבה
-                    df_merged = pd.merge(df_filtered, df_history, left_on=live_name_col, right_on=history_name_col, how='left')
-                    df_merged.fillna('אין נתונים בעבר', inplace=True)
-                    
-                    # חישוב פערים
-                    for metric in ['swim', 'bike', 'run', 'תוצאה']:
-                        if metric in df_merged.columns:
-                            df_merged[f'{metric}_td'] = df_merged[metric].apply(time_to_delta)
-                            df_merged[f'פער - {metric}'] = (df_merged[f'{metric}_td'] - my_times[metric]).apply(format_gap)
-                    
-                    # תצוגה
-                    display_cols = [live_name_col, 'bike', 'פער - bike', 'run', 'פער - run', 'תוצאה', 'פער - תוצאה']
-                    st.dataframe(df_merged[display_cols], use_container_width=True)
-                    
+                    year_col = [col for col in df_live.columns if 'לידה' in col or 'שנת' in col]
+                    if year_col:
+                        y_col = year_col[0]
+                        df_live[y_col] = pd.to_numeric(df_live[y_col], errors='coerce')
+                        
+                        # סינון 50-54
+                        df_filtered = df_live[(df_live[y_col] >= 1972) & (df_live[y_col] <= 1976)]
+                        st.success(f"נמצאו {len(df_filtered)} מתחרים בקטגוריית 50-54!")
+                        
+                        # ניסיון לטעון את קובץ ההיסטוריה (אם העלית אותו לגיטהאב)
+                        try:
+                            df_history = pd.read_csv("triathlon_results_raw.csv")
+                            live_name_col = [col for col in df_filtered.columns if 'שם' in col][0]
+                            history_name_col = [col for col in df_history.columns if 'שם' in col][0]
+                            
+                            df_merged = pd.merge(df_filtered, df_history, left_on=live_name_col, right_on=history_name_col, how='left')
+                            df_merged.fillna('אין נתונים בעבר', inplace=True)
+                            
+                            for metric in ['swim', 'bike', 'run', 'תוצאה']:
+                                if metric in df_merged.columns:
+                                    df_merged[f'{metric}_td'] = df_merged[metric].apply(time_to_delta)
+                                    df_merged[f'פער - {metric}'] = (df_merged[f'{metric}_td'] - my_times[metric]).apply(format_gap)
+                            
+                            display_cols = [live_name_col]
+                            for m in ['bike', 'run', 'תוצאה']:
+                                if m in df_merged.columns: display_cols.extend([m, f'פער - {m}'])
+                                
+                            st.dataframe(df_merged[display_cols], use_container_width=True)
+                            
+                        except FileNotFoundError:
+                            st.warning("⚠️ לא נמצא קובץ היסטוריה (triathlon_results_raw.csv). מציג את רשימת הנרשמים בלבד:")
+                            st.dataframe(df_filtered, use_container_width=True)
+                            
+                    else:
+                        st.error("לא נמצאה עמודת שנת לידה בטבלה.")
                 else:
-                    st.error("לא הצלחתי למצוא טבלה בקישור הזה.")
+                    st.error("לא נמצאו טבלאות נתונים בקישור זה.")
+                    
             except Exception as e:
-                st.error(f"אירעה שגיאה: {e}")
+                st.error(f"שגיאת תקשורת מהירה: {e}")
     else:
-        st.warning("אנא הדבק קישור לפני הלחיצה על הכפתור.")
+        st.warning("אנא הדבק קישור לפני הלחיצה.")
