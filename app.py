@@ -26,10 +26,19 @@ my_times = {
     'תוצאה': pd.to_timedelta('01:26:27')
 }
 
-# --- פונקציית השאיבה ---
+# --- פונקציית השאיבה ---  return None
 async def fetch_participants(url):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
+        # הפעלת הדפדפן במצב חסכוני מיוחד לשרתי ענן חלשים
+        browser = await p.chromium.launch(
+            headless=True, 
+            args=[
+                '--no-sandbox', 
+                '--disable-dev-shm-usage', 
+                '--disable-gpu', 
+                '--single-process'
+            ]
+        )
         page = await browser.new_page()
         await page.goto(url)
         await page.wait_for_selector("table", timeout=15000)
@@ -41,7 +50,6 @@ async def fetch_participants(url):
         if table:
             return pd.read_html(str(table))[0]
         return None
-
 # --- פונקציית עזר לחישוב זמנים ---
 def time_to_delta(t_str):
     try:
