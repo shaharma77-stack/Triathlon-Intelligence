@@ -26,7 +26,7 @@ my_times = {
     'תוצאה': pd.to_timedelta('01:26:27')
 }
 
-# --- פונקציית השאיבה ---  return None
+# --- פונקציית השאיבה ---  
 async def fetch_participants(url):
     async with async_playwright() as p:
         # הפעלת הדפדפן במצב חסכוני מיוחד לשרתי ענן חלשים
