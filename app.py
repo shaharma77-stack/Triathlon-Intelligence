@@ -1,6 +1,15 @@
 import streamlit as st
 import pandas as pd
 import asyncio
+import os
+
+# פונקציה שמתקינה את הדפדפן הנסתר בשרת באופן אוטומטי
+@st.cache_resource
+def install_playwright():
+    os.system("playwright install chromium")
+    os.system("playwright install-deps")
+
+install_playwright()
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
