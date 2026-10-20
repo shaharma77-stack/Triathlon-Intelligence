@@ -64,13 +64,24 @@ if st.button("🚀 נתח יריבים והצג מפת פערים"):
                 df_filtered = df_live[(df_live[y_col] >= 1972) & (df_live[y_col] <= 1976)]
                 st.success(f"מעולה! סוננו {len(df_filtered)} מתחרים בקטגוריית 50-54 מתוך קובץ המשתתפים.")
             else:
-                # אין עמודת גיל - המערכת מניחה שהקובץ כבר עבר סינון ידני שלך
                 df_filtered = df_live.copy()
                 st.info(f"לא זוהתה עמודת שנת לידה בקובץ המשתתפים. המערכת מניחה שהקובץ סונן מראש ומנתחת את כל {len(df_filtered)} המשתתפים בו.")
                 
-            # מציאת עמודות השם
-            live_name_col = [col for col in df_filtered.columns if 'שם' in col][0]
-            history_name_col = [col for col in df_history.columns if 'שם' in col][0]
+            # מציאת עמודות השם בצורה בטוחה ורחבה
+            live_name_candidates = [col for col in df_filtered.columns if 'שם' in str(col) or 'name' in str(col).lower() or 'משתתף' in str(col) or 'מתחרה' in str(col)]
+            history_name_candidates = [col for col in df_history.columns if 'שם' in str(col) or 'name' in str(col).lower() or 'משתתף' in str(col) or 'מתחרה' in str(col)]
+            
+            # הצגת שגיאה מפורטת אם עדיין לא נמצאה כותרת
+            if not live_name_candidates:
+                st.error(f"❌ שגיאה: לא מצאתי עמודה המכילה את המילה 'שם' (או מתחרה/משתתף) בקובץ **המשתתפים**. העמודות שזוהו בקובץ שלך הן: {', '.join(map(str, df_filtered.columns))}")
+                st.stop()
+                
+            if not history_name_candidates:
+                st.error(f"❌ שגיאה: לא מצאתי עמודה המכילה את המילה 'שם' בקבצי **ההיסטוריה**. העמודות שזוהו בקובץ שלך הן: {', '.join(map(str, df_history.columns))}")
+                st.stop()
+                
+            live_name_col = live_name_candidates[0]
+            history_name_col = history_name_candidates[0]
             
             df_history_unique = df_history.drop_duplicates(subset=[history_name_col])
             
