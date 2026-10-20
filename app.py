@@ -3,7 +3,7 @@ import pandas as pd
 
 # --- עיצוב המסך ---
 st.set_page_config(page_title="Triathlon Intel", page_icon="🏆", layout="wide")
-st.title("🏆 בוט מודיעין טריאתלון - גרסת פרימיום (סינון חכם)")
+st.title("🏆 בוט מודיעין טריאתלון - גרסת פרימיום חכמה")
 
 st.markdown("""
 **איך זה עובד?**
@@ -67,17 +67,16 @@ if st.button("🚀 נתח יריבים והצג מפת פערים"):
                 df_filtered = df_live.copy()
                 st.info(f"לא זוהתה עמודת שנת לידה בקובץ המשתתפים. המערכת מניחה שהקובץ סונן מראש ומנתחת את כל {len(df_filtered)} המשתתפים בו.")
                 
-            # מציאת עמודות השם בצורה בטוחה ורחבה
+            # מציאת עמודות השם בצורה בטוחה
             live_name_candidates = [col for col in df_filtered.columns if 'שם' in str(col) or 'name' in str(col).lower() or 'משתתף' in str(col) or 'מתחרה' in str(col)]
             history_name_candidates = [col for col in df_history.columns if 'שם' in str(col) or 'name' in str(col).lower() or 'משתתף' in str(col) or 'מתחרה' in str(col)]
             
-            # הצגת שגיאה מפורטת אם עדיין לא נמצאה כותרת
             if not live_name_candidates:
-                st.error(f"❌ שגיאה: לא מצאתי עמודה המכילה את המילה 'שם' (או מתחרה/משתתף) בקובץ **המשתתפים**. העמודות שזוהו בקובץ שלך הן: {', '.join(map(str, df_filtered.columns))}")
+                st.error(f"❌ שגיאה: לא מצאתי עמודת 'שם' בקובץ המשתתפים. עמודות שזוהו: {', '.join(map(str, df_filtered.columns))}")
                 st.stop()
                 
             if not history_name_candidates:
-                st.error(f"❌ שגיאה: לא מצאתי עמודה המכילה את המילה 'שם' בקבצי **ההיסטוריה**. העמודות שזוהו בקובץ שלך הן: {', '.join(map(str, df_history.columns))}")
+                st.error(f"❌ שגיאה: לא מצאתי עמודת 'שם' בקבצי ההיסטוריה. עמודות שזוהו: {', '.join(map(str, df_history.columns))}")
                 st.stop()
                 
             live_name_col = live_name_candidates[0]
@@ -87,7 +86,9 @@ if st.button("🚀 נתח יריבים והצג מפת פערים"):
             
             # הצלבה (מיזוג)
             df_merged = pd.merge(df_filtered, df_history_unique, left_on=live_name_col, right_on=history_name_col, how='left')
-            df_merged.fillna('אין נתונים בעבר', inplace=True)
+            
+            # התיקון לשגיאת ה-float64: המרת הטבלה לסוג "אובייקט" לפני הכנסת הטקסט
+            df_merged = df_merged.astype(object).fillna('אין נתונים בעבר')
             
             # חישוב פערים
             for metric in ['swim', 'bike', 'run', 'תוצאה']:
